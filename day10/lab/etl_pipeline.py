@@ -116,6 +116,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         "cleaned_csv": str(cleaned_path.relative_to(ROOT)),
         "chroma_path": os.environ.get("CHROMA_DB_PATH", "./chroma_db"),
         "chroma_collection": os.environ.get("CHROMA_COLLECTION", "day10_kb"),
+        "index_backend": os.environ.get("LAST_INDEX_BACKEND", "chroma"),
     }
     man_path = MAN_DIR / f"manifest_{run_id.replace(':', '-')}.json"
     man_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -133,8 +134,16 @@ def cmd_embed_internal(cleaned_csv: Path, *, run_id: str, log) -> bool:
         import chromadb
         from chromadb.utils import embedding_functions
     except ImportError:
-        log("ERROR: chromadb chưa cài. pip install -r requirements.txt")
-        return False
+        from local_retrieval import LOCAL_INDEX, write_local_index
+        from transform.cleaning_rules import load_raw_csv as load_csv
+
+        rows = load_csv(cleaned_csv)
+        for row in rows:
+            row["run_id"] = run_id
+        write_local_index(rows)
+        os.environ["LAST_INDEX_BACKEND"] = "local_jsonl"
+        log(f"embed_fallback_jsonl count={len(rows)} path={LOCAL_INDEX.relative_to(ROOT)}")
+        return True
 
     db_path = os.environ.get("CHROMA_DB_PATH", str(ROOT / "chroma_db"))
     collection_name = os.environ.get("CHROMA_COLLECTION", "day10_kb")
@@ -173,6 +182,7 @@ def cmd_embed_internal(cleaned_csv: Path, *, run_id: str, log) -> bool:
     ]
     # Idempotent: upsert theo chunk_id
     col.upsert(ids=ids, documents=documents, metadatas=metadatas)
+    os.environ["LAST_INDEX_BACKEND"] = "chroma"
     log(f"embed_upsert count={len(ids)} collection={collection_name}")
     return True
 
@@ -189,6 +199,11 @@ def cmd_freshness(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
+
     parser = argparse.ArgumentParser(description="Day 10 ETL pipeline")
     sub = parser.add_subparsers(dest="command", required=True)
 

@@ -104,6 +104,11 @@ def check_manifest(path: Path) -> Tuple[int, List[str]]:
 
 
 def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
+
     p = argparse.ArgumentParser(description="Day 10 lab — quick artifact checks for instructors")
     root = Path(__file__).resolve().parent
     p.add_argument(

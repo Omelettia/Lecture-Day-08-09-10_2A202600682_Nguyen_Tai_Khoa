@@ -1,90 +1,58 @@
-# Báo Cáo Nhóm — Lab Day 10: Data Pipeline & Data Observability
+# Group Report - Lab Day 10: Data Pipeline & Data Observability
 
-**Tên nhóm:** ___________  
-**Thành viên:**
-| Tên | Vai trò (Day 10) | Email |
-|-----|------------------|-------|
-| ___ | Ingestion / Raw Owner | ___ |
-| ___ | Cleaning & Quality Owner | ___ |
-| ___ | Embed & Idempotency Owner | ___ |
-| ___ | Monitoring / Docs Owner | ___ |
+**Group:** 2A202600682 - Nguyen Tai Khoa  
+**Submission date:** 2026-06-10  
+**Final clean run_id:** `clean-final`  
+**Inject run_id:** `inject-bad`
 
-**Ngày nộp:** ___________  
-**Repo:** ___________  
-**Độ dài khuyến nghị:** 600–1000 từ
+## 1. Pipeline Overview
 
----
+The raw input is `data/raw/policy_export_dirty.csv`, a simulated multi-source export for the CS and IT Helpdesk knowledge base. The pipeline loads raw rows, normalizes and quarantines invalid rows, validates cleaned rows with halt/warn expectations, then publishes the retrieval index. In this environment `chromadb` was not installed, so the pipeline used the built-in local JSONL fallback at `artifacts/index/local_index.jsonl`; the Chroma path remains available when dependencies are installed.
 
-> **Nộp tại:** `reports/group_report.md`  
-> **Deadline commit:** xem `SCORING.md` (code/trace sớm; report có thể muộn hơn nếu được phép).  
-> Phải có **run_id**, **đường dẫn artifact**, và **bằng chứng before/after** (CSV eval hoặc screenshot).
+One command for the final run:
 
----
+```bash
+python etl_pipeline.py run --run-id clean-final
+```
 
-## 1. Pipeline tổng quan (150–200 từ)
+Final counts: `raw_records=247`, `cleaned_records=34`, `quarantine_records=213`.
 
-> Nguồn raw là gì (CSV mẫu / export thật)? Chuỗi lệnh chạy end-to-end? `run_id` lấy ở đâu trong log?
+## 2. Cleaning & Expectations
 
-**Tóm tắt luồng:**
+New cleaning coverage includes `access_control_sop` in the allowlist, export-noise cleanup, repeated `lam viec` collapse, HR 2025 annual-leave text quarantine even when the date is misleading, and dedupe after final cleaning/fixes.
 
-_________________
+### 2a. metric_impact
 
-**Lệnh chạy một dòng (copy từ README thực tế của nhóm):**
+| Rule / Expectation | Before | After / inject | Evidence |
+|---|---:|---:|---|
+| `stale_hr_policy_text_2025` | baseline halt: `hr_leave_no_stale_10d_annual` had 2 violations | clean-final: 0 violations | `artifacts/logs/run_clean-final.log` |
+| `access_control_sop` allowlist | baseline quarantined all access-control rows as unknown | clean-final includes `access_control_level4_approvers_present matching_chunks=1` | `artifacts/cleaned/cleaned_clean-final.csv` |
+| dedupe after refund fix | stale 14-day row could survive as distinct text before final dedupe | inject shows `refund_no_stale_14d_window FAIL violations=1`; clean-final has 0 | `artifacts/logs/run_inject-bad.log`, `run_clean-final.log` |
+| `canonical_doc_coverage` | would fail when access-control was omitted | clean-final `missing_doc_ids=[]` | `artifacts/logs/run_clean-final.log` |
+| `no_export_noise_prefixes` | noisy prefixes existed in raw rows | clean-final `noisy_chunks=0` | `artifacts/logs/run_clean-final.log` |
 
-_________________
+## 3. Before / After Retrieval
 
----
+Intentional corruption used:
 
-## 2. Cleaning & expectation (150–200 từ)
+```bash
+python etl_pipeline.py run --run-id inject-bad --no-refund-fix --skip-validate
+python eval_retrieval.py --out artifacts/eval/after_inject_bad.csv
+```
 
-> Baseline đã có nhiều rule (allowlist, ngày ISO, HR stale, refund, dedupe…). Nhóm thêm **≥3 rule mới** + **≥2 expectation mới**. Khai báo expectation nào **halt**.
+The inject run correctly failed `refund_no_stale_14d_window` with `violations=1` and continued only because `--skip-validate` was intentional for Sprint 3. The final clean eval is `artifacts/eval/after_fix_eval.csv`; the official grading output is `artifacts/eval/grading_run.jsonl`.
 
-### 2a. Bảng metric_impact (bắt buộc — chống trivial)
+Final grading result: all `gq_d10_01` through `gq_d10_10` have `contains_expected=true`, `hits_forbidden=false`, and expected top-1 document matches where required.
 
-| Rule / Expectation mới (tên ngắn) | Trước (số liệu) | Sau / khi inject (số liệu) | Chứng cứ (log / CSV / commit) |
-|-----------------------------------|------------------|-----------------------------|-------------------------------|
-| … | … | … | … |
+## 4. Freshness & Monitoring
 
-**Rule chính (baseline + mở rộng):**
+`manifest_clean-final.json` reports `latest_exported_at=2026-04-10T00:00:00`. On the lab date 2026-06-10, the default 24 hour SLA returns freshness `FAIL`. This is expected for the static sample data and should be treated as a monitor signal, not a failed pipeline run.
 
-- …
+## 5. Day 09 Link
 
-**Ví dụ 1 lần expectation fail (nếu có) và cách xử lý:**
+Day 10 prepares the corpus that Day 09 retrieval and synthesis workers should consume. The supervisor/worker stack should read only from the cleaned, validated index, which prevents the Day 09 agent from routing to stale HR/refund context.
 
-_________________
+## 6. Remaining Risks
 
----
-
-## 3. Before / after ảnh hưởng retrieval hoặc agent (200–250 từ)
-
-> Bắt buộc: inject corruption (Sprint 3) — mô tả + dẫn `artifacts/eval/…` hoặc log.
-
-**Kịch bản inject:**
-
-_________________
-
-**Kết quả định lượng (từ CSV / bảng):**
-
-_________________
-
----
-
-## 4. Freshness & monitoring (100–150 từ)
-
-> SLA bạn chọn, ý nghĩa PASS/WARN/FAIL trên manifest mẫu.
-
-_________________
-
----
-
-## 5. Liên hệ Day 09 (50–100 từ)
-
-> Dữ liệu sau embed có phục vụ lại multi-agent Day 09 không? Nếu có, mô tả tích hợp; nếu không, giải thích vì sao tách collection.
-
-_________________
-
----
-
-## 6. Rủi ro còn lại & việc chưa làm
-
-- …
+- The local fallback is deterministic and passes the lab checks, but production should install Chroma or another vector store.
+- Freshness needs a real source watermark in production instead of relying only on exported CSV timestamps.

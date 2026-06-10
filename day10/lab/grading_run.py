@@ -34,12 +34,12 @@ def main() -> int:
     p.add_argument("--top-k", type=int, default=5)
     args = p.parse_args()
 
+    use_chroma = True
     try:
         import chromadb
         from chromadb.utils import embedding_functions
     except ImportError:
-        print("pip install chromadb sentence-transformers", file=sys.stderr)
-        return 1
+        use_chroma = False
 
     qpath = Path(args.questions)
     qs = json.loads(qpath.read_text(encoding="utf-8"))
@@ -47,9 +47,22 @@ def main() -> int:
     collection_name = os.environ.get("CHROMA_COLLECTION", "day10_kb")
     model_name = os.environ.get("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 
-    client = chromadb.PersistentClient(path=db_path)
-    emb = embedding_functions.SentenceTransformerEmbeddingFunction(model_name=model_name)
-    col = client.get_collection(name=collection_name, embedding_function=emb)
+    col = None
+    local_rows = []
+    if use_chroma:
+        client = chromadb.PersistentClient(path=db_path)
+        emb = embedding_functions.SentenceTransformerEmbeddingFunction(model_name=model_name)
+        try:
+            col = client.get_collection(name=collection_name, embedding_function=emb)
+        except Exception:
+            use_chroma = False
+    if not use_chroma:
+        from local_retrieval import load_local_index
+
+        local_rows = load_local_index()
+        if not local_rows:
+            print("No Chroma collection and no local JSONL index found. Run etl_pipeline.py run first.", file=sys.stderr)
+            return 2
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -57,9 +70,14 @@ def main() -> int:
     with out.open("w", encoding="utf-8") as f:
         for q in qs:
             text = q["question"]
-            res = col.query(query_texts=[text], n_results=args.top_k)
-            docs = (res.get("documents") or [[]])[0]
-            metas = (res.get("metadatas") or [[]])[0]
+            if use_chroma:
+                res = col.query(query_texts=[text], n_results=args.top_k)
+                docs = (res.get("documents") or [[]])[0]
+                metas = (res.get("metadatas") or [[]])[0]
+            else:
+                from local_retrieval import query_local_index
+
+                docs, metas = query_local_index(text, n_results=args.top_k, rows=local_rows)
             blob = " ".join(docs).lower()
             must_any = [x.lower() for x in q.get("must_contain_any", [])]
             forbidden = [x.lower() for x in q.get("must_not_contain", [])]

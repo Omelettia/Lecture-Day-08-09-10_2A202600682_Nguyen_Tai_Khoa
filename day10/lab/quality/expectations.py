@@ -112,5 +112,58 @@ def run_expectations(cleaned_rows: List[Dict[str, Any]]) -> Tuple[List[Expectati
         )
     )
 
+    # E7: all canonical documents needed by grading are published.
+    required_docs = {
+        "policy_refund_v4",
+        "sla_p1_2026",
+        "it_helpdesk_faq",
+        "hr_leave_policy",
+        "access_control_sop",
+    }
+    present_docs = {str(r.get("doc_id") or "") for r in cleaned_rows}
+    missing_docs = sorted(required_docs - present_docs)
+    results.append(
+        ExpectationResult(
+            "canonical_doc_coverage",
+            not missing_docs,
+            "halt",
+            f"missing_doc_ids={missing_docs}",
+        )
+    )
+
+    # E8: access control must include the Level 4 approver evidence.
+    access_level4 = [
+        r
+        for r in cleaned_rows
+        if r.get("doc_id") == "access_control_sop"
+        and "Level 4 Admin Access" in (r.get("chunk_text") or "")
+        and "IT Manager" in (r.get("chunk_text") or "")
+        and "CISO" in (r.get("chunk_text") or "")
+    ]
+    results.append(
+        ExpectationResult(
+            "access_control_level4_approvers_present",
+            len(access_level4) >= 1,
+            "halt",
+            f"matching_chunks={len(access_level4)}",
+        )
+    )
+
+    # E9: noisy export prefixes should be removed before embedding.
+    noisy = [
+        r
+        for r in cleaned_rows
+        if (r.get("chunk_text") or "").startswith("Nội dung không rõ ràng:")
+        or (r.get("chunk_text") or "").startswith("!!!")
+    ]
+    results.append(
+        ExpectationResult(
+            "no_export_noise_prefixes",
+            len(noisy) == 0,
+            "warn",
+            f"noisy_chunks={len(noisy)}",
+        )
+    )
+
     halt = any(not r.passed and r.severity == "halt" for r in results)
     return results, halt

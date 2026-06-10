@@ -20,15 +20,39 @@ ALLOWED_DOC_IDS = frozenset(
         "sla_p1_2026",
         "it_helpdesk_faq",
         "hr_leave_policy",
+        "access_control_sop",
     }
 )
 
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _DMY_SLASH = re.compile(r"^(\d{2})/(\d{2})/(\d{4})$")
+_REPEATED_WORKDAY = re.compile(r"(làm việc)(?:\s+làm việc)+")
+_NOISE_PREFIXES = (
+    "Nội dung không rõ ràng:",
+    "!!!",
+)
+_STALE_HR_ANNUAL_LEAVE_MARKERS = (
+    "10 ngày phép năm (bản HR 2025)",
+    "10 ngày làm việc phép năm (bản HR 2025)",
+)
 
 
 def _norm_text(s: str) -> str:
     return " ".join((s or "").strip().split()).lower()
+
+
+def _normalize_chunk_text(text: str) -> str:
+    """Remove export noise that hurts retrieval but is not source content."""
+    s = " ".join((text or "").strip().split())
+    changed = True
+    while changed:
+        changed = False
+        for prefix in _NOISE_PREFIXES:
+            if s.startswith(prefix):
+                s = s[len(prefix) :].strip()
+                changed = True
+    s = _REPEATED_WORKDAY.sub(r"\1", s)
+    return s
 
 
 def _stable_chunk_id(doc_id: str, chunk_text: str, seq: int) -> str:
@@ -111,17 +135,24 @@ def clean_rows(
             )
             continue
 
-        if not text:
+        normalized_text = _normalize_chunk_text(text)
+        if not normalized_text:
             quarantine.append({**raw, "reason": "missing_chunk_text"})
             continue
 
-        key = _norm_text(text)
-        if key in seen_text:
-            quarantine.append({**raw, "reason": "duplicate_chunk_text"})
+        if doc_id == "hr_leave_policy" and any(
+            marker in normalized_text for marker in _STALE_HR_ANNUAL_LEAVE_MARKERS
+        ):
+            quarantine.append(
+                {
+                    **raw,
+                    "reason": "stale_hr_policy_text_2025",
+                    "effective_date_normalized": eff_norm,
+                }
+            )
             continue
-        seen_text.add(key)
 
-        fixed_text = text
+        fixed_text = normalized_text
         if apply_refund_window_fix and doc_id == "policy_refund_v4":
             if "14 ngày làm việc" in fixed_text:
                 fixed_text = fixed_text.replace(
@@ -129,6 +160,12 @@ def clean_rows(
                     "7 ngày làm việc",
                 )
                 fixed_text += " [cleaned: stale_refund_window]"
+
+        key = _norm_text(fixed_text)
+        if key in seen_text:
+            quarantine.append({**raw, "reason": "duplicate_chunk_text_after_clean"})
+            continue
+        seen_text.add(key)
 
         seq += 1
         cleaned.append(
