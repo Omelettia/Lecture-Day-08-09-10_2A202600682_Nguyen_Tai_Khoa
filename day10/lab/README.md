@@ -291,3 +291,34 @@ Freshness / version → Volume & errors → Schema & contract → Lineage / run_
 - Lab Day 09 (orchestration): [`../../day09/lab/README.md`](../../day09/lab/README.md)
 - Great Expectations (tuỳ chọn nâng cao): https://docs.greatexpectations.io/
 - ChromaDB: https://docs.trychroma.com/
+
+---
+
+## Submission Evidence - Nguyen Tai Khoa
+
+Final verified run:
+
+```bash
+python etl_pipeline.py run --run-id clean-final
+python grading_run.py --out artifacts/eval/grading_run.jsonl
+python instructor_quick_check.py --grading artifacts/eval/grading_run.jsonl --manifest artifacts/manifests/manifest_clean-final.json
+```
+
+Report files:
+
+- Group report: `reports/group_report.md`
+- Individual report: `reports/individual/nguyen_tai_khoa.md`
+- Quality report: `docs/quality_report.md`
+- Architecture: `docs/pipeline_architecture.md`
+- Data contract: `docs/data_contract.md`
+- Runbook: `docs/runbook.md`
+
+Evidence artifacts:
+
+- Final grading: `artifacts/eval/grading_run.jsonl`
+- Clean eval: `artifacts/eval/after_fix_eval.csv`
+- Inject-bad eval: `artifacts/eval/after_inject_bad.csv`
+- Final manifest: `artifacts/manifests/manifest_clean-final.json`
+- Inject manifest: `artifacts/manifests/manifest_inject-bad.json`
+- Final cleaned CSV: `artifacts/cleaned/cleaned_clean-final.csv`
+- Inject cleaned CSV: `artifacts/cleaned/cleaned_inject-bad.csv`
