@@ -45,5 +45,5 @@ Day 09 workers rely on the same CS and IT Helpdesk knowledge base. Day 10 owns t
 
 ## 5. Known Risks
 
-- This environment did not have `chromadb`, so the final verification used the local JSONL fallback.
+- Final verification used Chroma collection `day10_kb` with `embed_upsert count=34`; local JSONL remains available only as a fallback.
 - Sample `exported_at` values are from April 2026, so freshness correctly fails against the default 24 hour SLA on 2026-06-10.

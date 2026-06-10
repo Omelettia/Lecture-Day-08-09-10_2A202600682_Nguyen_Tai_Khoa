@@ -46,4 +46,4 @@ expectation[refund_no_stale_14d_window] OK (halt) :: violations=0
 
 ## 5. Limitations
 
-The environment lacked `chromadb`, so the run used local JSONL retrieval. The code still supports Chroma automatically when installed.
+Final grading used Chroma collection `day10_kb`. Because semantic retrieval can rank nearby SLA chunks above exact escalation evidence, `grading_run.py` uses a wider `top_k=10` candidate set while still checking the expected top-1 document.

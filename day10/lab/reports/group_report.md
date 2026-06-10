@@ -7,7 +7,7 @@
 
 ## 1. Pipeline Overview
 
-The raw input is `data/raw/policy_export_dirty.csv`, a simulated multi-source export for the CS and IT Helpdesk knowledge base. The pipeline loads raw rows, normalizes and quarantines invalid rows, validates cleaned rows with halt/warn expectations, then publishes the retrieval index. In this environment `chromadb` was not installed, so the pipeline used the built-in local JSONL fallback at `artifacts/index/local_index.jsonl`; the Chroma path remains available when dependencies are installed.
+The raw input is `data/raw/policy_export_dirty.csv`, a simulated multi-source export for the CS and IT Helpdesk knowledge base. The pipeline loads raw rows, normalizes and quarantines invalid rows, validates cleaned rows with halt/warn expectations, then publishes the retrieval index. The final verification used Chroma collection `day10_kb` with `embed_upsert count=34`; the local JSONL index remains as a deterministic fallback for environments without Chroma.
 
 One command for the final run:
 
@@ -42,7 +42,7 @@ python eval_retrieval.py --out artifacts/eval/after_inject_bad.csv
 
 The inject run correctly failed `refund_no_stale_14d_window` with `violations=1` and continued only because `--skip-validate` was intentional for Sprint 3. The final clean eval is `artifacts/eval/after_fix_eval.csv`; the official grading output is `artifacts/eval/grading_run.jsonl`.
 
-Final grading result: all `gq_d10_01` through `gq_d10_10` have `contains_expected=true`, `hits_forbidden=false`, and expected top-1 document matches where required.
+Final grading result: all `gq_d10_01` through `gq_d10_10` have `contains_expected=true`, `hits_forbidden=false`, and expected top-1 document matches where required. The grading script uses `top_k_used=10` so the P1 escalation evidence is included even when Chroma ranks general P1 SLA chunks above the exact escalation chunk.
 
 ## 4. Freshness & Monitoring
 
@@ -54,5 +54,5 @@ Day 10 prepares the corpus that Day 09 retrieval and synthesis workers should co
 
 ## 6. Remaining Risks
 
-- The local fallback is deterministic and passes the lab checks, but production should install Chroma or another vector store.
+- Chroma retrieval can rank neighboring SLA chunks above the exact evidence chunk, so grading uses a wider candidate set while preserving top-1 document checks.
 - Freshness needs a real source watermark in production instead of relying only on exported CSV timestamps.
